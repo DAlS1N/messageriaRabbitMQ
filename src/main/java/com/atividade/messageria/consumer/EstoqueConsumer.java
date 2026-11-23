@@ -1,8 +1,8 @@
 package com.atividade.messageria.consumer;
 
 import com.atividade.messageria.config.RabbitConfig;
-import com.atividade.messageria.dto.PedidoCriadoEvent;
-import com.atividade.messageria.store.PedidoStore;
+import com.atividade.messageria.model.PedidoCriadoEvent;
+import com.atividade.messageria.service.PedidoStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;

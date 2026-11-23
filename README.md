@@ -18,49 +18,77 @@ Cliente --POST /pedidos--> Pedido API --> [pedidos.exchange (TOPIC)]
 
 | # | Requisito | Onde |
 |---|-----------|------|
-| 1 | Cadastro de pedido | `PedidoController#criar` / `PedidoService` |
-| 2 | Publicação do evento | `PedidoService` (`rabbitTemplate.convertAndSend`) |
-| 3 | Consumidor de estoque | `EstoqueConsumer` |
-| 4 | Consumidor de pagamento | `PagamentoConsumer` |
-| 5 | Consumidor de notificação | `NotificacaoConsumer` |
-| 6 | Exchange TOPIC | `RabbitConfig#pedidosExchange` (`pedidos.exchange`) |
+| 1 | Cadastro de pedido | `controller/PedidoController#criar` + `service/PedidoService` |
+| 2 | Publicação do evento | `producer/PedidoProducer#publicarPedidoCriado` |
+| 3 | Consumidor de estoque | `consumer/EstoqueConsumer` |
+| 4 | Consumidor de pagamento | `consumer/PagamentoConsumer` |
+| 5 | Consumidor de notificação | `consumer/NotificacaoConsumer` |
+| 6 | Exchange TOPIC | `config/RabbitConfig#pedidosExchange` (`pedidos.exchange`) |
 | 7 | Routing keys | `pedido.criado`, `pedido.pago`, `pedido.recusado`, binding `pedido.#` |
-| 8 | Pelo menos 3 filas | estoque, pagamento, notificação (+ DLQ) |
+| 8 | Pelo menos 3 filas | estoque, pagamento, notificação (+ DLQ) em `config/RabbitConfig` |
 | 9 | Monitoramento | RabbitMQ Management em http://localhost:15672 (guest/guest) |
-| 10 | Mensagens inválidas | validação `@Valid` na API (400) + DLX/DLQ nos consumers |
+| 10 | Mensagens inválidas | `@Valid` na API (400) + DLX/DLQ + `AmqpRejectAndDontRequeueException` nos consumers |
+
+## Estrutura
+
+```
+com.atividade.messageria
+├── MessageriaApplication
+├── config/       RabbitConfig (exchange, filas, bindings, DLQ, conversor JSON)
+├── controller/   PedidoController, ApiExceptionHandler
+├── model/        PedidoRequest, ItemPedido, PedidoCriadoEvent, PedidoStatusEvent
+├── producer/     PedidoProducer (publica no RabbitMQ)
+├── service/      PedidoService, PedidoStore (memória)
+└── consumer/     EstoqueConsumer, PagamentoConsumer, NotificacaoConsumer
+```
 
 ## Como rodar
 
+Pré-requisitos: JDK 17 ou superior e um RabbitMQ em `localhost:5672`.
+
+**1. Subir o RabbitMQ** (uma das opções):
+
 ```bash
-docker compose up -d          # sobe o RabbitMQ (AMQP 5672, Management 15672)
-./mvnw spring-boot:run        # ou: mvn spring-boot:run
+docker compose up -d          # AMQP 5672, Management 15672
 ```
+
+Ou instale o RabbitMQ localmente (Erlang + RabbitMQ Server) e habilite o painel com
+`rabbitmq-plugins enable rabbitmq_management`.
+
+Confirme abrindo http://localhost:15672 (guest / guest).
+
+**2. Subir a aplicação** (uma das opções):
+
+- **IntelliJ / IDE:** abra a pasta do projeto, aguarde o Maven baixar as dependências e execute a classe
+  `MessageriaApplication`.
+- **Terminal, com Maven instalado:** `mvn spring-boot:run`
 
 ## Testes manuais
 
+Os exemplos abaixo usam o PowerShell (Windows). Se preferir, use o Postman ou o `curl` do Linux/macOS.
+
 Pedido válido (aprovado):
-```bash
-curl -X POST localhost:8080/pedidos -H "Content-Type: application/json" -d '{
-  "cliente": "Kauã",
-  "itens": [{"produto":"Teclado","quantidade":2,"precoUnitario":150.00}]
-}'
+```powershell
+$body = '{"cliente":"Kauã","itens":[{"produto":"Teclado","quantidade":2,"precoUnitario":150.00}]}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/pedidos -ContentType "application/json" -Body $body
 ```
 
 Pedido acima de R$ 10.000 (pagamento recusado, routing key `pedido.recusado`):
-```bash
-curl -X POST localhost:8080/pedidos -H "Content-Type: application/json" -d '{
-  "cliente": "Kauã",
-  "itens": [{"produto":"Notebook","quantidade":5,"precoUnitario":4000.00}]
-}'
+```powershell
+$body = '{"cliente":"Kauã","itens":[{"produto":"Notebook","quantidade":5,"precoUnitario":4000.00}]}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/pedidos -ContentType "application/json" -Body $body
 ```
 
-Consultar as etapas de um pedido: `GET /pedidos/{pedidoId}`
+Consultar as etapas de um pedido:
+```powershell
+Invoke-RestMethod http://localhost:8080/pedidos/<pedidoId>
+```
 
 Pedido inválido na API (cliente vazio, quantidade 0) -> `400 Bad Request`, nada vai para o RabbitMQ.
 
 Mensagem inválida direto na fila (JSON quebrado) -> vai para a DLQ:
-```bash
-curl -X POST localhost:8080/pedidos/teste-invalido
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/pedidos/teste-invalido
 ```
 Abra Queues and Streams -> `pedidos.dlq` e use "Get messages" para ver o conteúdo
 (chegam 3 cópias: uma por fila que recebeu `pedido.criado`).

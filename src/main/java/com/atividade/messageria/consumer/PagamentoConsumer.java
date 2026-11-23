@@ -1,14 +1,14 @@
 package com.atividade.messageria.consumer;
 
 import com.atividade.messageria.config.RabbitConfig;
-import com.atividade.messageria.dto.PedidoCriadoEvent;
-import com.atividade.messageria.dto.PedidoStatusEvent;
-import com.atividade.messageria.store.PedidoStore;
+import com.atividade.messageria.model.PedidoCriadoEvent;
+import com.atividade.messageria.model.PedidoStatusEvent;
+import com.atividade.messageria.producer.PedidoProducer;
+import com.atividade.messageria.service.PedidoStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -20,11 +20,11 @@ public class PagamentoConsumer {
     private static final BigDecimal LIMITE = new BigDecimal("10000");
 
     private final PedidoStore store;
-    private final RabbitTemplate rabbitTemplate;
+    private final PedidoProducer producer;
 
-    public PagamentoConsumer(PedidoStore store, RabbitTemplate rabbitTemplate) {
+    public PagamentoConsumer(PedidoStore store, PedidoProducer producer) {
         this.store = store;
-        this.rabbitTemplate = rabbitTemplate;
+        this.producer = producer;
     }
 
     @RabbitListener(queues = RabbitConfig.Q_PAGAMENTO)
@@ -43,7 +43,7 @@ public class PagamentoConsumer {
         store.registrarEtapa(evento.pedidoId(), status);
 
         // Publica um novo evento: a Notificacao (pedido.#) tambem recebe esse
-        rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, routingKey,
+        producer.publicarStatus(routingKey,
                 new PedidoStatusEvent(evento.pedidoId(), status,
                         aprovado ? "Pagamento aprovado" : "Pagamento acima do limite de R$ 10.000"));
     }
