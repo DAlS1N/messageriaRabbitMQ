@@ -69,14 +69,42 @@ Os exemplos abaixo usam o PowerShell (Windows). Se preferir, use o Postman ou o 
 
 Pedido válido (aprovado):
 ```powershell
-$body = '{"cliente":"Kauã","itens":[{"produto":"Teclado","quantidade":2,"precoUnitario":150.00}]}'
-Invoke-RestMethod -Method Post -Uri http://localhost:8080/pedidos -ContentType "application/json" -Body $body
+$body = @{
+    cliente = "Kaua"
+    itens = @(
+        @{
+            produto = "Teclado"
+            quantidade = 2
+            precoUnitario = 150.00
+        }
+    )
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod `
+    -Method Post `
+    -Uri "http://localhost:8080/pedidos" `
+    -ContentType "application/json; charset=utf-8" `
+    -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 ```
 
 Pedido acima de R$ 10.000 (pagamento recusado, routing key `pedido.recusado`):
 ```powershell
-$body = '{"cliente":"Kauã","itens":[{"produto":"Notebook","quantidade":5,"precoUnitario":4000.00}]}'
-Invoke-RestMethod -Method Post -Uri http://localhost:8080/pedidos -ContentType "application/json" -Body $body
+$body = @{
+    cliente = "Kaua"
+    itens = @(
+        @{
+            produto = "Notebook"
+            quantidade = 5
+            precoUnitario = 4000.00
+        }
+    )
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod `
+    -Method Post `
+    -Uri "http://localhost:8080/pedidos" `
+    -ContentType "application/json; charset=utf-8" `
+    -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 ```
 
 Consultar as etapas de um pedido:
@@ -100,3 +128,7 @@ Abra Queues and Streams -> `pedidos.dlq` e use "Get messages" para ver o conteú
 - JSON quebrado -> `MessageConversionException` (rejeição fatal automática do Spring AMQP).
 - Conteúdo inválido (sem itens, valor <= 0, sem pedidoId) -> `AmqpRejectAndDontRequeueException` no consumer.
 - Nenhum consumer lê a `pedidos.dlq` de propósito, para a mensagem ficar visível no Management.
+
+## LINK DO VIDEO
+
+https://youtu.be/Rcsr1Ppg99c
